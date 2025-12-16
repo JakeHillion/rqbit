@@ -42,6 +42,7 @@
 pub mod peer;
 pub mod peers;
 pub mod stats;
+pub mod webseeds;
 
 use std::{
     borrow::Cow,
@@ -108,6 +109,7 @@ use self::{
     },
     peers::PeerStates,
     stats::{atomic::AtomicStats, snapshot::StatsSnapshot},
+    webseeds::WebSeedStates,
 };
 
 use super::{
@@ -176,6 +178,7 @@ const FLUSH_BITV_EVERY_BYTES: u64 = 16 * 1024 * 1024;
 
 pub struct TorrentStateLive {
     peers: PeerStates,
+    web_seeds: Arc<WebSeedStates>,
     pub(crate) shared: Arc<ManagedTorrentShared>,
     metadata: Arc<TorrentMetadata>,
     locked: RwLock<TorrentStateLocked>,
@@ -253,6 +256,13 @@ impl TorrentStateLive {
         )>();
         let ratelimits = Limits::new(paused.shared.options.ratelimits);
 
+        // Initialize web seeds from torrent metadata
+        let web_seeds = Arc::new(WebSeedStates::new());
+        for url in &paused.metadata.url_list {
+            web_seeds.add_seed(url.clone());
+            debug!("Added web seed: {}", url);
+        }
+
         let state = Arc::new(TorrentStateLive {
             shared: paused.shared.clone(),
             metadata: paused.metadata.clone(),
@@ -262,6 +272,7 @@ impl TorrentStateLive {
                 states: Default::default(),
                 live_outgoing_peers: Default::default(),
             },
+            web_seeds,
             locked: RwLock::new(TorrentStateLocked {
                 chunks: Some(paused.chunk_tracker),
                 // TODO: move under per_piece_locks?
@@ -331,6 +342,50 @@ impl TorrentStateLive {
             format!("[{}]upload_scheduler", state.shared.id),
             state.clone().task_upload_scheduler(ratelimit_upload_rx),
         );
+
+        // Spawn web seed chunk requesters if enabled and web seeds are available
+        if paused.shared.options.webseed_opts.enabled && !paused.metadata.url_list.is_empty() {
+            let session = session.clone();
+            let torrent_info = Arc::new(paused.metadata.info.clone());
+            let downloader = Arc::new(webseeds::WebSeedDownloader::new(
+                Arc::new(session.reqwest_client.clone()),
+                torrent_info,
+                state.web_seeds.clone(),
+            ));
+
+            // Spawn multiple workers per web seed for parallelism
+            let workers_per_seed = paused.shared.options.webseed_opts.max_connections_per_seed;
+            let mut total_workers = 0;
+
+            for url in state.web_seeds.get_active_seeds() {
+                for worker_id in 0..workers_per_seed {
+                    let state_clone = state.clone();
+                    let downloader_clone = downloader.clone();
+                    let url_clone = url.clone();
+                    let priority = paused.shared.options.webseed_opts.priority;
+
+                    state.spawn(
+                        debug_span!(parent: state.shared.span.clone(), "webseed_requester", url = %url, worker = worker_id),
+                        format!("[{}]webseed_{}_{}", state.shared.id, url, worker_id),
+                        webseeds::task_webseed_chunk_requester(
+                            state_clone,
+                            url_clone,
+                            downloader_clone,
+                            priority,
+                        ),
+                    );
+                    total_workers += 1;
+                }
+            }
+
+            info!(
+                id = state.shared.id,
+                "Spawned {} web seed workers ({} workers per seed)",
+                total_workers,
+                workers_per_seed
+            );
+        }
+
         Ok(state)
     }
 

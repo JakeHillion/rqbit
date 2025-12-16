@@ -118,6 +118,7 @@ pub(crate) struct ManagedTorrentOptions {
     pub disk_write_queue: Option<DiskWorkQueueSender>,
     pub ratelimits: LimitsConfig,
     pub initial_peers: Vec<SocketAddr>,
+    pub webseed_opts: crate::session::WebSeedOptions,
     #[cfg(feature = "disable-upload")]
     pub _disable_upload: bool,
 }
@@ -140,6 +141,7 @@ pub struct TorrentMetadata {
     pub torrent_bytes: Bytes,
     pub info_bytes: Bytes,
     pub file_infos: FileInfos,
+    pub url_list: Vec<String>,
 }
 
 impl TorrentMetadata {
@@ -161,11 +163,22 @@ impl TorrentMetadata {
             })
             .collect::<anyhow::Result<Vec<FileInfo>>>()?;
 
+        // Extract url_list from torrent metadata
+        let url_list = if let Ok(parsed) = librqbit_core::torrent_metainfo::torrent_from_bytes(&torrent_bytes) {
+            parsed.url_list
+                .iter()
+                .filter_map(|url| std::str::from_utf8(url.as_ref()).ok().map(|s| s.to_string()))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
         Ok(Self {
             info,
             torrent_bytes,
             info_bytes,
             file_infos,
+            url_list,
         })
     }
 

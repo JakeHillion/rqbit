@@ -42,6 +42,31 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+/// Custom deserializer for url-list that handles both single string and list formats
+/// BEP-19 allows url-list to be either a string or a list of strings
+mod url_list_serde {
+    use serde::{Deserialize, Deserializer};
+
+    pub fn deserialize<'de, D, BufType>(deserializer: D) -> Result<Vec<BufType>, D::Error>
+    where
+        D: Deserializer<'de>,
+        BufType: Deserialize<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum StringOrVec<T> {
+            Single(T),
+            Multiple(Vec<T>),
+        }
+
+        match StringOrVec::deserialize(deserializer) {
+            Ok(StringOrVec::Single(s)) => Ok(vec![s]),
+            Ok(StringOrVec::Multiple(v)) => Ok(v),
+            Err(_) => Ok(Vec::new()),
+        }
+    }
+}
+
 /// A parsed .torrent file.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TorrentMetaV1<BufType> {
@@ -49,7 +74,7 @@ pub struct TorrentMetaV1<BufType> {
     pub announce: Option<BufType>,
     #[serde(
         rename = "announce-list",
-        default = "Vec::new",
+        default,
         skip_serializing_if = "Vec::is_empty"
     )]
     pub announce_list: Vec<Vec<BufType>>,
@@ -66,6 +91,16 @@ pub struct TorrentMetaV1<BufType> {
     pub publisher_url: Option<BufType>,
     #[serde(rename = "creation date", skip_serializing_if = "Option::is_none")]
     pub creation_date: Option<usize>,
+
+    // BEP-19: GetRight-style web seeds
+    // Can be either a single string or a list of strings
+    #[serde(
+        rename = "url-list",
+        default,
+        deserialize_with = "url_list_serde::deserialize",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub url_list: Vec<BufType>,
 
     #[serde(skip)]
     pub info_hash: Id20,
@@ -92,12 +127,12 @@ pub struct TorrentMetaV1Info<BufType> {
     // Single-file mode
     #[serde(skip_serializing_if = "Option::is_none")]
     pub length: Option<u64>,
-    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attr: Option<BufType>,
-    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha1: Option<BufType>,
     #[serde(
-        default = "none",
+        default,
         rename = "symlink path",
         skip_serializing_if = "Option::is_none"
     )]
@@ -431,12 +466,12 @@ pub struct TorrentMetaV1File<BufType> {
     pub length: u64,
     pub path: Vec<BufType>,
 
-    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attr: Option<BufType>,
-    #[serde(default = "none", skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha1: Option<BufType>,
     #[serde(
-        default = "none",
+        default,
         rename = "symlink path",
         skip_serializing_if = "Option::is_none"
     )]
@@ -499,6 +534,7 @@ where
             publisher: self.publisher.clone_to_owned(within_buffer),
             publisher_url: self.publisher_url.clone_to_owned(within_buffer),
             creation_date: self.creation_date,
+            url_list: self.url_list.clone_to_owned(within_buffer),
             info_hash: self.info_hash,
         }
     }

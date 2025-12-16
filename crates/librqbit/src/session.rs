@@ -118,7 +118,7 @@ pub struct Session {
     listen_addr: Option<SocketAddr>,
     dht: Option<Dht>,
     pub(crate) connector: Arc<StreamConnector>,
-    reqwest_client: reqwest::Client,
+    pub(crate) reqwest_client: reqwest::Client,
     udp_tracker_client: UdpTrackerClient,
     disable_trackers: bool,
 
@@ -291,6 +291,65 @@ pub struct AddTorrentOptions {
 
     // Custom trackers
     pub trackers: Option<Vec<String>>,
+
+    /// Web seed configuration
+    #[serde(default)]
+    pub webseed_opts: WebSeedOptions,
+}
+
+/// Web seed download priority strategy
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum WebSeedPriority {
+    /// Prefer web seeds over peers for pieces available from both
+    WebSeedsFirst,
+    /// Use both web seeds and peers, let the fastest source win
+    #[default]
+    Balanced,
+    /// Prefer peers over web seeds, use web seeds as backup
+    PeersFirst,
+}
+
+/// Configuration options for web seed support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WebSeedOptions {
+    /// Enable or disable web seed support
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Priority strategy for downloading from web seeds vs peers
+    #[serde(default)]
+    pub priority: WebSeedPriority,
+
+    /// Timeout for HTTP requests to web seeds (in seconds)
+    #[serde(default = "default_webseed_timeout")]
+    pub timeout_secs: u64,
+
+    /// Maximum number of concurrent connections per web seed
+    #[serde(default = "default_max_webseed_connections")]
+    pub max_connections_per_seed: usize,
+}
+
+impl Default for WebSeedOptions {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            priority: WebSeedPriority::default(),
+            timeout_secs: default_webseed_timeout(),
+            max_connections_per_seed: default_max_webseed_connections(),
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_webseed_timeout() -> u64 {
+    30
+}
+
+fn default_max_webseed_connections() -> usize {
+    4
 }
 
 pub struct ListOnlyResponse {
@@ -1282,6 +1341,7 @@ impl Session {
                     disk_write_queue: self.disk_write_tx.clone(),
                     ratelimits: opts.ratelimits,
                     initial_peers: opts.initial_peers.clone().unwrap_or_default(),
+                    webseed_opts: opts.webseed_opts.clone(),
                     #[cfg(feature = "disable-upload")]
                     _disable_upload: self._disable_upload,
                 },
