@@ -457,10 +457,6 @@ impl<BufType: AsRef<[u8]>> TorrentMetaV1Info<BufType> {
     }
 }
 
-const fn none<T>() -> Option<T> {
-    None
-}
-
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct TorrentMetaV1File<BufType> {
     pub length: u64,

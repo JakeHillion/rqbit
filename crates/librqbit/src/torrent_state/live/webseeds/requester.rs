@@ -12,7 +12,7 @@ use crate::{
     torrent_state::live::TorrentStateLive,
 };
 
-use super::{WebSeedDownloader, WebSeedStates, downloader::{is_permanent_failure, is_temporary_failure}};
+use super::{WebSeedDownloader, downloader::is_permanent_failure};
 
 /// Spawns a task that continuously downloads chunks from a web seed
 pub async fn task_webseed_chunk_requester(
@@ -165,7 +165,7 @@ fn find_piece_for_webseed(
     // Return random piece from tier 1 if any
     if !tier1_candidates.is_empty() {
         use rand::Rng;
-        let idx = rand::thread_rng().gen_range(0..tier1_candidates.len());
+        let idx = rand::rng().random_range(0..tier1_candidates.len());
         let selected = tier1_candidates[idx];
         debug!("Selected random piece {} from {} tier-1 candidates (unavailable from peers)", selected, tier1_candidates.len());
         return Some(selected);
@@ -177,7 +177,7 @@ fn find_piece_for_webseed(
             // Return random piece from tier 2 candidates
             if !tier2_candidates.is_empty() {
                 use rand::Rng;
-                let idx = rand::thread_rng().gen_range(0..tier2_candidates.len());
+                let idx = rand::rng().random_range(0..tier2_candidates.len());
                 let selected = tier2_candidates[idx];
                 debug!("Selected random piece {} from {} tier-2 candidates", selected, tier2_candidates.len());
                 return Some(selected);

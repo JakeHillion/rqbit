@@ -3,7 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, bail};
 use bytes::Bytes;
 use librqbit_core::{
-    lengths::{ChunkInfo, Lengths, ValidPieceIndex},
+    lengths::{ChunkInfo, Lengths},
     torrent_metainfo::ValidatedTorrentMetaV1Info,
 };
 use reqwest::Client;
@@ -119,35 +119,6 @@ impl WebSeedDownloader {
         Ok(Bytes::from(result))
     }
 
-    /// Construct the URL for downloading a chunk and calculate the offset within the file
-    /// Returns (url, file_offset) where file_offset is relative to the start of the specific file
-    fn construct_url_and_offset_for_chunk(
-        &self,
-        base_url: &str,
-        chunk_info: ChunkInfo,
-    ) -> anyhow::Result<(String, u64)> {
-        // Get the absolute offset of the chunk in the torrent
-        let chunk_offset = self.lengths.chunk_absolute_offset(&chunk_info);
-
-        // Find which file(s) this chunk belongs to
-        // Iterate through files to find which one contains this offset
-        for file_details in self.torrent_info.iter_file_details_ext() {
-            let file_start = file_details.offset;
-            let file_end = file_start + file_details.details.len;
-
-            // Check if chunk starts in this file
-            if chunk_offset >= file_start && chunk_offset < file_end {
-                // Construct URL for this file
-                let url = self.construct_file_url(base_url, &file_details.details.filename)?;
-                // Calculate offset within this specific file
-                let file_offset = chunk_offset - file_start;
-                return Ok((url, file_offset));
-            }
-        }
-
-        bail!("Could not find file for chunk offset {}", chunk_offset);
-    }
-
     /// Construct the full URL for a file (BEP-19)
     /// Base URL + torrent_name (for multi-file) + file path components
     fn construct_file_url(
@@ -181,25 +152,6 @@ impl WebSeedDownloader {
 
         Ok(url)
     }
-
-    /// Download a whole piece from a web seed
-    /// This downloads all chunks of a piece and concatenates them
-    pub async fn download_piece(
-        &self,
-        web_seed_url: &str,
-        piece_index: ValidPieceIndex,
-    ) -> anyhow::Result<Vec<u8>> {
-        let piece_length = self.lengths.piece_length(piece_index);
-        let mut piece_data = Vec::with_capacity(piece_length as usize);
-
-        // Download all chunks for this piece
-        for chunk_info in self.lengths.iter_chunk_infos(piece_index) {
-            let chunk_bytes = self.download_chunk(web_seed_url, chunk_info).await?;
-            piece_data.extend_from_slice(&chunk_bytes);
-        }
-
-        Ok(piece_data)
-    }
 }
 
 /// Helper to determine if an HTTP status code indicates a permanent failure
@@ -208,11 +160,6 @@ pub fn is_permanent_failure(status: &reqwest::StatusCode) -> bool {
         status.as_u16(),
         404 | 403 | 410 | 451 // Not Found, Forbidden, Gone, Unavailable For Legal Reasons
     )
-}
-
-/// Helper to determine if an HTTP status code indicates a temporary failure
-pub fn is_temporary_failure(status: &reqwest::StatusCode) -> bool {
-    status.is_server_error() || status.as_u16() == 429 // 5xx or Too Many Requests
 }
 
 #[cfg(test)]

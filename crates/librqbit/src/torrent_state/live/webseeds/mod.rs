@@ -5,15 +5,12 @@ use parking_lot::RwLock;
 
 pub mod downloader;
 pub mod requester;
-pub mod stats;
 
 pub use downloader::WebSeedDownloader;
 pub use requester::task_webseed_chunk_requester;
 
 /// Represents a single web seed URL
 pub struct WebSeed {
-    /// The base URL for this web seed
-    pub url: String,
     /// Statistics for this web seed
     pub stats: WebSeedStats,
     /// Exponential backoff state
@@ -34,10 +31,6 @@ pub struct WebSeedStats {
     pub requests_succeeded: std::sync::atomic::AtomicU64,
     /// Number of failed requests
     pub requests_failed: std::sync::atomic::AtomicU64,
-    /// Number of pieces downloaded via availability priority
-    pub availability_priority_pieces: std::sync::atomic::AtomicU64,
-    /// Number of pieces downloaded via configured priority
-    pub configured_priority_pieces: std::sync::atomic::AtomicU64,
 }
 
 impl WebSeedStats {
@@ -46,8 +39,6 @@ impl WebSeedStats {
             bytes_downloaded: std::sync::atomic::AtomicU64::new(0),
             requests_succeeded: std::sync::atomic::AtomicU64::new(0),
             requests_failed: std::sync::atomic::AtomicU64::new(0),
-            availability_priority_pieces: std::sync::atomic::AtomicU64::new(0),
-            configured_priority_pieces: std::sync::atomic::AtomicU64::new(0),
         }
     }
 }
@@ -119,9 +110,8 @@ impl BackoffState {
 }
 
 impl WebSeed {
-    pub fn new(url: String) -> Self {
+    pub fn new() -> Self {
         Self {
-            url,
             stats: WebSeedStats::new(),
             backoff: BackoffState::new(),
         }
@@ -141,7 +131,7 @@ impl WebSeedStates {
     }
 
     pub fn add_seed(&self, url: String) {
-        self.seeds.insert(url.clone(), WebSeed::new(url));
+        self.seeds.insert(url, WebSeed::new());
     }
 
     pub fn get_active_seeds(&self) -> Vec<String> {
