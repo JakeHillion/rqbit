@@ -243,16 +243,40 @@ async fn download_piece_from_webseed(
         anyhow::bail!("Piece {} hash verification failed", piece_index);
     }
 
-    // Mark the piece as complete
-    {
+    // Mark the piece as complete (only update stats if we were the one to mark it)
+    let was_newly_completed = {
         let mut locked = state.locked.write();
         let chunks = locked.get_chunks_mut()?;
-        chunks.mark_piece_downloaded(piece_index);
-    }
+        let have_pieces = chunks.get_have_pieces().as_slice();
+        let already_had = have_pieces.get(piece_index.get() as usize).map(|b| *b).unwrap_or(true);
+        if !already_had {
+            chunks.mark_piece_downloaded(piece_index);
+        }
+        !already_had
+    };
 
-    // Notify others that we have a new piece
-    let _ = state.have_broadcast_tx.send(piece_index);
-    state.new_pieces_notify.notify_waiters();
+    if was_newly_completed {
+        // Update global piece counters (same as peer downloads)
+        let piece_len = state.lengths.piece_length(piece_index) as u64;
+        state
+            .stats
+            .downloaded_and_checked_bytes
+            .fetch_add(piece_len, std::sync::atomic::Ordering::Release);
+        state
+            .stats
+            .downloaded_and_checked_pieces
+            .fetch_add(1, std::sync::atomic::Ordering::Release);
+        state
+            .stats
+            .have_bytes
+            .fetch_add(piece_len, std::sync::atomic::Ordering::Relaxed);
+
+        // Notify others that we have a new piece and check if torrent is finished
+        let _ = state.have_broadcast_tx.send(piece_index);
+        state.new_pieces_notify.notify_waiters();
+        state.on_piece_completed(piece_index)?;
+        state.transmit_haves(piece_index);
+    }
 
     info!("Piece {} successfully downloaded and verified from web seed", piece_index);
 
