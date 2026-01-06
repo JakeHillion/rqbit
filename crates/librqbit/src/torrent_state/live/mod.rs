@@ -765,7 +765,12 @@ impl TorrentStateLive {
             uploaded_bytes: self.stats.uploaded_bytes.load(Relaxed),
             total_piece_download_ms: self.stats.total_piece_download_ms.load(Relaxed),
             peer_stats: self.peers.stats(),
+            web_seed_stats: self.web_seeds.stats_snapshot().aggregate,
         }
+    }
+
+    pub fn webseed_stats_snapshot(&self) -> webseeds::WebSeedsStatsSnapshot {
+        self.web_seeds.stats_snapshot()
     }
 
     pub fn per_peer_stats_snapshot(&self, filter: PeerStatsFilter) -> PeerStatsSnapshot {

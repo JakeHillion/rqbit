@@ -1,3 +1,4 @@
+use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
@@ -5,9 +6,11 @@ use parking_lot::RwLock;
 
 pub mod downloader;
 pub mod requester;
+pub mod stats;
 
 pub use downloader::WebSeedDownloader;
 pub use requester::task_webseed_chunk_requester;
+pub use stats::{AggregateWebSeedStats, WebSeedStatsSnapshot, WebSeedsStatsSnapshot};
 
 /// Represents a single web seed URL
 pub struct WebSeed {
@@ -179,5 +182,46 @@ impl WebSeedStates {
                 .requests_failed
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+    }
+
+    pub fn stats_snapshot(&self) -> WebSeedsStatsSnapshot {
+        let mut seeds = Vec::with_capacity(self.seeds.len());
+        let mut aggregate = AggregateWebSeedStats::default();
+
+        for entry in self.seeds.iter() {
+            let url = entry.key().clone();
+            let seed = entry.value();
+
+            let state = seed.backoff.get_state();
+            let state_str = match state {
+                WebSeedState::Active => "active",
+                WebSeedState::BackingOff => "backing_off",
+                WebSeedState::Dead => "dead",
+            };
+
+            let bytes_downloaded = seed.stats.bytes_downloaded.load(Ordering::Relaxed);
+            let requests_succeeded = seed.stats.requests_succeeded.load(Ordering::Relaxed);
+            let requests_failed = seed.stats.requests_failed.load(Ordering::Relaxed);
+
+            seeds.push(WebSeedStatsSnapshot {
+                url,
+                state: state_str,
+                bytes_downloaded,
+                requests_succeeded,
+                requests_failed,
+            });
+
+            aggregate.total_bytes_downloaded += bytes_downloaded;
+            aggregate.total_requests_succeeded += requests_succeeded;
+            aggregate.total_requests_failed += requests_failed;
+
+            match state {
+                WebSeedState::Active => aggregate.active_seeds += 1,
+                WebSeedState::BackingOff => aggregate.backing_off_seeds += 1,
+                WebSeedState::Dead => aggregate.dead_seeds += 1,
+            }
+        }
+
+        WebSeedsStatsSnapshot { seeds, aggregate }
     }
 }

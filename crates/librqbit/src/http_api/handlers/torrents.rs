@@ -109,6 +109,13 @@ pub async fn h_peer_stats(
     state.api.api_peer_stats(idx, filter).map(axum::Json)
 }
 
+pub async fn h_webseed_stats(
+    State(state): State<ApiState>,
+    Path(idx): Path<TorrentIdOrHash>,
+) -> Result<impl IntoResponse> {
+    state.api.api_webseed_stats(idx).map(axum::Json)
+}
+
 pub async fn h_torrent_action_pause(
     State(state): State<ApiState>,
     Path(idx): Path<TorrentIdOrHash>,

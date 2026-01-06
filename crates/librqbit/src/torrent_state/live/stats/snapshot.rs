@@ -3,6 +3,7 @@ use std::time::Duration;
 use serde::Serialize;
 
 use crate::torrent_state::live::peers::stats::AggregatePeerStats;
+use crate::torrent_state::live::webseeds::AggregateWebSeedStats;
 
 #[derive(Debug, Serialize, Default)]
 pub struct StatsSnapshot {
@@ -14,6 +15,7 @@ pub struct StatsSnapshot {
     pub downloaded_and_checked_pieces: u64,
     pub total_piece_download_ms: u64,
     pub peer_stats: AggregatePeerStats,
+    pub web_seed_stats: AggregateWebSeedStats,
 }
 
 impl StatsSnapshot {

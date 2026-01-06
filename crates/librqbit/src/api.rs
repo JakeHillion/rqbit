@@ -17,6 +17,7 @@ use crate::{
     session_stats::snapshot::SessionStatsSnapshot,
     torrent_state::{
         FileStream, ManagedTorrentHandle,
+        live::webseeds::WebSeedsStatsSnapshot,
         peer::stats::snapshot::{PeerStatsFilter, PeerStatsSnapshot},
     },
 };
@@ -278,6 +279,17 @@ impl Api {
                 crate::Error::TorrentIsNotLive,
             )?
             .per_peer_stats_snapshot(filter))
+    }
+
+    pub fn api_webseed_stats(&self, idx: TorrentIdOrHash) -> Result<WebSeedsStatsSnapshot> {
+        let handle = self.mgr_handle(idx)?;
+        Ok(handle
+            .live()
+            .with_status_error(
+                StatusCode::PRECONDITION_FAILED,
+                crate::Error::TorrentIsNotLive,
+            )?
+            .webseed_stats_snapshot())
     }
 
     pub async fn api_torrent_action_pause(

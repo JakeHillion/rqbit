@@ -55,6 +55,7 @@ async fn h_api_root(parts: Parts) -> impl IntoResponse {
             "GET /torrents/{id_or_infohash}/stats/v1": "Torrent stats",
             "GET /torrents/{id_or_infohash}/peer_stats": "Per peer stats",
             "GET /torrents/{id_or_infohash}/peer_stats/prometheus": "Per peer stats in prometheus format",
+            "GET /torrents/{id_or_infohash}/webseed_stats": "Web seed (HTTP source) stats",
             "GET /torrents/{id_or_infohash}/stream/{file_idx}": "Stream a file. Accepts Range header to seek.",
             "GET /torrents/{id_or_infohash}/playlist": "Playlist for supported players",
             "POST /torrents": "Add a torrent here. magnet: or http:// or a local file.",
@@ -93,6 +94,10 @@ pub fn make_api_router(state: ApiState) -> Router {
         .route(
             "/torrents/{id}/peer_stats/prometheus",
             get(torrents::h_peer_stats_prometheus),
+        )
+        .route(
+            "/torrents/{id}/webseed_stats",
+            get(torrents::h_webseed_stats),
         )
         .route("/torrents/{id}/playlist", get(playlist::h_torrent_playlist))
         .route("/torrents/playlist", get(playlist::h_global_playlist))
