@@ -1018,6 +1018,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tinytemplate",
+ "tokio",
  "walkdir",
 ]
 
@@ -2875,6 +2876,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "console-subscriber",
+ "criterion",
  "dashmap 6.1.0",
  "futures",
  "governor",

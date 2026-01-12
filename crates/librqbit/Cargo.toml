@@ -146,3 +146,11 @@ anyhow = "1"
 tracing-subscriber = "0.3"
 tokio-test = "0.4"
 tempfile = "3"
+criterion = { version = "0.7.0", features = ["async_tokio"] }
+axum = "0.8"
+tokio-util = { version = "0.7", features = ["io"] }
+futures = "0.3"
+
+[[bench]]
+name = "webseed_benchmark"
+harness = false
